@@ -35,7 +35,7 @@ export default async function LoginPage({
             مجالس
           </h1>
           <p className="fade-up fade-delay-1 mt-3 text-muted">
-            سجّل الدخول لإدارة سجل الاجتماعات.
+            سجّل الدخول لإدارة سجل المجالس.
           </p>
         </div>
 

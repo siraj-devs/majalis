@@ -11,7 +11,7 @@ const tajawal = Tajawal({
 
 export const metadata: Metadata = {
   title: "مجالس",
-  description: "سجل الاجتماعات — إدارة المجالس والمشاركين.",
+  description: "سجل المجالس — إدارة المجالس والحضور.",
 };
 
 export default function RootLayout({

@@ -18,7 +18,7 @@ export function AppHeader({ username }: AppHeaderProps) {
               href="/"
               className="text-muted transition hover:text-foreground"
             >
-              الاجتماعات
+              المجالس
             </Link>
             <Link
               href="/admins"

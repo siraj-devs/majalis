@@ -1,18 +1,28 @@
 "use server";
 
+import { isEndAfterStart, normalizeTime } from "@/lib/time";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { z } from "zod";
 
-const meetingSchema = z.object({
-  date: z.string().min(1),
-  startTime: z.string().regex(/^\d{2}:\d{2}$/),
-  endTime: z.string().regex(/^\d{2}:\d{2}$/),
-  notes: z.string().optional(),
-  participants: z.string().optional(),
-});
+const timeSchema = z
+  .string()
+  .regex(/^\d{2}:\d{2}(?::\d{2})?$/)
+  .transform(normalizeTime);
+
+const meetingSchema = z
+  .object({
+    date: z.string().min(1),
+    startTime: timeSchema,
+    endTime: timeSchema,
+    notes: z.string().optional(),
+    participants: z.string().optional(),
+  })
+  .refine((data) => isEndAfterStart(data.startTime, data.endTime), {
+    message: "وقت النهاية يجب أن يكون بعد وقت البداية",
+    path: ["endTime"],
+  });
 
 function parseParticipants(raw: string | undefined): string[] {
   if (!raw?.trim()) return [];
@@ -52,7 +62,6 @@ export async function createMeeting(formData: FormData) {
   });
 
   revalidatePath("/");
-  redirect("/");
 }
 
 export async function updateMeeting(id: string, formData: FormData) {
@@ -71,13 +80,10 @@ export async function updateMeeting(id: string, formData: FormData) {
   });
 
   revalidatePath("/");
-  revalidatePath(`/meetings/${id}/edit`);
-  redirect("/");
 }
 
 export async function deleteMeeting(id: string) {
   await requireAdmin();
   await prisma.meeting.delete({ where: { id } });
   revalidatePath("/");
-  redirect("/");
 }
