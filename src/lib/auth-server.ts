@@ -1,7 +1,8 @@
 import {
   createAuthSession,
   deleteSessionByToken,
-  getUserFromSessionToken,
+  getAuthFromSessionToken,
+  type SessionAuth,
 } from "@/lib/auth-db";
 import { cookies } from "next/headers";
 
@@ -29,18 +30,21 @@ export async function removeAuthCookie() {
   cookieStore.delete(SESSION_COOKIE);
 }
 
-export async function establishSession(params: {
-  connectionId: string;
-  userId: string;
-}) {
+export async function establishSession(params: { connectionId: string }) {
   const { token } = await createAuthSession(params);
   await setAuthCookie(token);
 }
 
-export async function getCurrentUser() {
+export async function getCurrentAuth(): Promise<SessionAuth | null> {
   const token = await getAuthToken();
   if (!token) return null;
-  return getUserFromSessionToken(token);
+  return getAuthFromSessionToken(token);
+}
+
+/** Linked app user, or null if only a pending Telegram connection. */
+export async function getCurrentUser() {
+  const auth = await getCurrentAuth();
+  return auth?.user ?? null;
 }
 
 export async function clearSession() {

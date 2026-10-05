@@ -1,5 +1,5 @@
 import { LoginButton } from "@/components/login-button";
-import { getCurrentUser } from "@/lib/auth-server";
+import { getCurrentAuth } from "@/lib/auth-server";
 import { redirect } from "next/navigation";
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -13,9 +13,11 @@ export default async function LoginPage({
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
-  const user = await getCurrentUser();
-  if (user) {
-    redirect(user.isAdmin ? "/" : "/unauthorized");
+  const auth = await getCurrentAuth();
+  if (auth) {
+    const canEnter =
+      auth.user?.role === "admin" && !auth.user.isBlocked;
+    redirect(canEnter ? "/" : "/unauthorized");
   }
 
   const { error } = await searchParams;

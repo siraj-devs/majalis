@@ -1,7 +1,8 @@
 import env from "@/env";
-import { upsertConnectionAndUser } from "@/lib/auth-db";
+import { upsertConnection } from "@/lib/auth-db";
 import { establishSession } from "@/lib/auth-server";
 import { fetchWithTimeout } from "@/lib/crypto";
+import { prisma } from "@/lib/prisma";
 import { verifyTelegramIdToken } from "@/lib/telegram-oidc";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
@@ -69,7 +70,7 @@ export async function GET(request: NextRequest) {
       telegramUser.preferred_username ??
       telegramUser.name.toLowerCase().replace(/\s+/g, "_");
 
-    const { connectionId, userId } = await upsertConnectionAndUser({
+    const { connectionId, userId } = await upsertConnection({
       provider: "telegram",
       providerId: String(telegramUser.sub),
       name: telegramUser.name,
@@ -77,7 +78,20 @@ export async function GET(request: NextRequest) {
       avatar: telegramUser.picture ?? null,
     });
 
-    await establishSession({ connectionId, userId });
+    await establishSession({ connectionId });
+
+    if (!userId) {
+      return NextResponse.redirect(new URL("/unauthorized", request.url));
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true, isBlocked: true },
+    });
+
+    if (!user || user.isBlocked || user.role !== "admin") {
+      return NextResponse.redirect(new URL("/unauthorized", request.url));
+    }
 
     return NextResponse.redirect(new URL("/", request.url));
   } catch (error) {

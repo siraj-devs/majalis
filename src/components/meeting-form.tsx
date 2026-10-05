@@ -2,7 +2,7 @@
 
 import {
   ParticipantsField,
-  type AdminOption,
+  type UserOption,
 } from "@/components/participants-field";
 import { earliestEndTime, isEndAfterStart } from "@/lib/time";
 import { useMemo, useState } from "react";
@@ -10,20 +10,20 @@ import { useMemo, useState } from "react";
 type MeetingFormProps = {
   action: (formData: FormData) => Promise<void>;
   submitLabel: string;
-  admins: AdminOption[];
+  users: UserOption[];
   defaultValues?: {
     date?: string;
     startTime?: string;
     endTime?: string;
     notes?: string | null;
-    participants?: string[];
+    participantIds?: string[];
   };
 };
 
 export function MeetingForm({
   action,
   submitLabel,
-  admins,
+  users,
   defaultValues,
 }: MeetingFormProps) {
   const [startTime, setStartTime] = useState(defaultValues?.startTime ?? "");
@@ -110,8 +110,8 @@ export function MeetingForm({
       {timeError ? <p className="text-sm text-foreground">{timeError}</p> : null}
 
       <ParticipantsField
-        defaultValue={defaultValues?.participants}
-        admins={admins}
+        defaultSelectedIds={defaultValues?.participantIds}
+        users={users}
       />
 
       <label className="flex flex-col gap-1.5 text-sm">

@@ -2,12 +2,17 @@
 
 import { createMeeting, deleteMeeting, updateMeeting } from "@/actions/meetings";
 import { MeetingForm } from "@/components/meeting-form";
-import type { AdminOption } from "@/components/participants-field";
-import { formatMeetingDate, toDateInputValue } from "@/lib/format";
+import type { UserOption } from "@/components/participants-field";
+import {
+  formatMeetingDate,
+  formatMeetingTimeRange,
+  toDateInputValue,
+} from "@/lib/format";
 import {
   PencilSimpleIcon,
   PlusIcon,
   TrashIcon,
+  UsersIcon,
   XIcon,
 } from "@phosphor-icons/react";
 import { useEffect, useRef, useState, useTransition } from "react";
@@ -18,12 +23,19 @@ export type MeetingListItem = {
   startTime: string;
   endTime: string;
   notes: string | null;
-  participants: string[];
+  attendees: {
+    userId: string;
+    user: {
+      id: string;
+      name: string | null;
+      telegramUsername: string | null;
+    };
+  }[];
 };
 
 type MeetingsUiProps = {
   meetings: MeetingListItem[];
-  admins: AdminOption[];
+  users: UserOption[];
 };
 
 type ModalMode =
@@ -32,7 +44,17 @@ type ModalMode =
   | { type: "delete"; meeting: MeetingListItem }
   | null;
 
-export function MeetingsUi({ meetings, admins }: MeetingsUiProps) {
+function attendeeLabel(user: {
+  name: string | null;
+  telegramUsername: string | null;
+  id: string;
+}) {
+  if (user.name?.trim()) return user.name.trim();
+  if (user.telegramUsername) return `@${user.telegramUsername}`;
+  return user.id;
+}
+
+export function MeetingsUi({ meetings, users }: MeetingsUiProps) {
   const [modal, setModal] = useState<ModalMode>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [deletePending, startDeleteTransition] = useTransition();
@@ -83,18 +105,27 @@ export function MeetingsUi({ meetings, admins }: MeetingsUiProps) {
                     <p className="font-medium">
                       {formatMeetingDate(meeting.date)}
                     </p>
-                    <p className="text-sm text-muted tabular-nums">
-                      {meeting.startTime} — {meeting.endTime}
+                    <p className="text-sm text-muted">
+                      {formatMeetingTimeRange(
+                        meeting.startTime,
+                        meeting.endTime,
+                      )}
+                    </p>
+                    <p className="inline-flex items-center gap-1.5 text-sm text-muted">
+                      <UsersIcon className="size-4" />
+                      {meeting.attendees.length === 0
+                        ? "بدون حضور"
+                        : `${meeting.attendees.length} حضور`}
                     </p>
                   </div>
-                  {meeting.participants.length > 0 ? (
+                  {meeting.attendees.length > 0 ? (
                     <ul className="flex flex-wrap gap-1.5">
-                      {meeting.participants.map((name) => (
+                      {meeting.attendees.map(({ user }) => (
                         <li
-                          key={name}
+                          key={user.id}
                           className="border border-border px-2 py-0.5 text-xs"
                         >
-                          {name}
+                          {attendeeLabel(user)}
                         </li>
                       ))}
                     </ul>
@@ -200,7 +231,7 @@ export function MeetingsUi({ meetings, admins }: MeetingsUiProps) {
             <div className="max-h-[80vh] overflow-y-auto px-5 py-5">
               <MeetingForm
                 key={modal.type === "edit" ? modal.meeting.id : "create"}
-                admins={admins}
+                users={users}
                 action={async (formData) => {
                   if (modal.type === "create") {
                     await createMeeting(formData);
@@ -219,7 +250,9 @@ export function MeetingsUi({ meetings, admins }: MeetingsUiProps) {
                         startTime: modal.meeting.startTime,
                         endTime: modal.meeting.endTime,
                         notes: modal.meeting.notes,
-                        participants: modal.meeting.participants,
+                        participantIds: modal.meeting.attendees.map(
+                          (a) => a.userId,
+                        ),
                       }
                     : undefined
                 }

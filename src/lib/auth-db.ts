@@ -1,6 +1,6 @@
 import { generateSessionToken, hashToken } from "@/lib/crypto";
 import { prisma } from "@/lib/prisma";
-import type { AuthProvider } from "@prisma/client";
+import type { AuthProvider, Role } from "@prisma/client";
 
 const SESSION_DAYS = 7;
 
@@ -12,7 +12,8 @@ export type ConnectionInput = {
   avatar?: string | null;
 };
 
-export async function upsertConnectionAndUser(input: ConnectionInput) {
+/** Upsert Telegram (etc.) connection only — never creates a User. */
+export async function upsertConnection(input: ConnectionInput) {
   const existing = await prisma.connection.findUnique({
     where: {
       provider_providerId: {
@@ -20,63 +21,35 @@ export async function upsertConnectionAndUser(input: ConnectionInput) {
         providerId: input.providerId,
       },
     },
-    include: { user: true },
   });
 
   if (existing) {
-    const [connection] = await prisma.$transaction([
-      prisma.connection.update({
-        where: { id: existing.id },
-        data: {
-          name: input.name,
-          username: input.username,
-          avatar: input.avatar ?? null,
-          accessedAt: new Date(),
-        },
-      }),
-      prisma.user.update({
-        where: { id: existing.userId },
-        data: {
-          name: input.name,
-          username: input.username,
-          image: input.avatar ?? null,
-        },
-      }),
-    ]);
-
-    return { connectionId: connection.id, userId: existing.userId };
+    const connection = await prisma.connection.update({
+      where: { id: existing.id },
+      data: {
+        name: input.name,
+        username: input.username,
+        avatar: input.avatar ?? null,
+        accessedAt: new Date(),
+      },
+    });
+    return { connectionId: connection.id, userId: connection.userId };
   }
 
-  const user = await prisma.user.create({
+  const connection = await prisma.connection.create({
     data: {
+      provider: input.provider,
+      providerId: input.providerId,
       name: input.name,
       username: input.username,
-      image: input.avatar ?? null,
-      connections: {
-        create: {
-          provider: input.provider,
-          providerId: input.providerId,
-          name: input.name,
-          username: input.username,
-          avatar: input.avatar ?? null,
-        },
-      },
+      avatar: input.avatar ?? null,
     },
-    include: { connections: true },
   });
 
-  const connection = user.connections[0];
-  if (!connection) {
-    throw new Error("Failed to create connection");
-  }
-
-  return { connectionId: connection.id, userId: user.id };
+  return { connectionId: connection.id, userId: null };
 }
 
-export async function createAuthSession(params: {
-  connectionId: string;
-  userId: string;
-}) {
+export async function createAuthSession(params: { connectionId: string }) {
   const token = generateSessionToken();
   const tokenHash = hashToken(token);
   const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
@@ -84,7 +57,6 @@ export async function createAuthSession(params: {
   await prisma.session.create({
     data: {
       tokenHash,
-      userId: params.userId,
       connectionId: params.connectionId,
       expiresAt,
     },
@@ -98,13 +70,31 @@ export async function deleteSessionByToken(token: string) {
   await prisma.session.deleteMany({ where: { tokenHash } });
 }
 
-export async function getUserFromSessionToken(token: string) {
+export type SessionAuth = {
+  connectionId: string;
+  connectionName: string;
+  connectionUsername: string;
+  connectionAvatar: string | null;
+  provider: AuthProvider;
+  user: {
+    id: string;
+    name: string | null;
+    image: string | null;
+    role: Role;
+    isBlocked: boolean;
+  } | null;
+};
+
+export async function getAuthFromSessionToken(
+  token: string,
+): Promise<SessionAuth | null> {
   const tokenHash = hashToken(token);
   const session = await prisma.session.findUnique({
     where: { tokenHash },
     include: {
-      user: true,
-      connection: true,
+      connection: {
+        include: { user: true },
+      },
     },
   });
 
@@ -117,13 +107,21 @@ export async function getUserFromSessionToken(token: string) {
     return null;
   }
 
+  const { connection } = session;
   return {
-    id: session.user.id,
-    name: session.user.name,
-    username: session.user.username,
-    image: session.user.image,
-    isAdmin: session.user.isAdmin,
-    connectionId: session.connectionId,
-    provider: session.connection.provider,
+    connectionId: connection.id,
+    connectionName: connection.name,
+    connectionUsername: connection.username,
+    connectionAvatar: connection.avatar,
+    provider: connection.provider,
+    user: connection.user
+      ? {
+          id: connection.user.id,
+          name: connection.user.name,
+          image: connection.user.image,
+          role: connection.user.role,
+          isBlocked: connection.user.isBlocked,
+        }
+      : null,
   };
 }

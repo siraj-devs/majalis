@@ -1,8 +1,8 @@
 "use server";
 
-import { isEndAfterStart, normalizeTime } from "@/lib/time";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
+import { isEndAfterStart, normalizeTime } from "@/lib/time";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -17,18 +17,18 @@ const meetingSchema = z
     startTime: timeSchema,
     endTime: timeSchema,
     notes: z.string().optional(),
-    participants: z.string().optional(),
+    participantIds: z.array(z.string().min(1)).default([]),
   })
   .refine((data) => isEndAfterStart(data.startTime, data.endTime), {
     message: "وقت النهاية يجب أن يكون بعد وقت البداية",
     path: ["endTime"],
   });
 
-function parseParticipants(raw: string | undefined): string[] {
-  if (!raw?.trim()) return [];
-  return raw
-    .split(/[\n,]/)
-    .map((p) => p.trim())
+function parseParticipantIds(formData: FormData): string[] {
+  return formData
+    .getAll("participantIds")
+    .map(String)
+    .map((id) => id.trim())
     .filter(Boolean);
 }
 
@@ -38,7 +38,7 @@ function parseMeetingForm(formData: FormData) {
     startTime: formData.get("startTime"),
     endTime: formData.get("endTime"),
     notes: (formData.get("notes") as string) || undefined,
-    participants: (formData.get("participants") as string) || undefined,
+    participantIds: parseParticipantIds(formData),
   });
 }
 
@@ -56,8 +56,10 @@ export async function createMeeting(formData: FormData) {
       startTime: data.startTime,
       endTime: data.endTime,
       notes: data.notes?.trim() || null,
-      participants: parseParticipants(data.participants),
       createdById: user.id,
+      attendees: {
+        create: data.participantIds.map((userId) => ({ userId })),
+      },
     },
   });
 
@@ -68,16 +70,21 @@ export async function updateMeeting(id: string, formData: FormData) {
   await requireAdmin();
   const data = parseMeetingForm(formData);
 
-  await prisma.meeting.update({
-    where: { id },
-    data: {
-      date: parseDateOnly(data.date),
-      startTime: data.startTime,
-      endTime: data.endTime,
-      notes: data.notes?.trim() || null,
-      participants: parseParticipants(data.participants),
-    },
-  });
+  await prisma.$transaction([
+    prisma.meetingParticipant.deleteMany({ where: { meetingId: id } }),
+    prisma.meeting.update({
+      where: { id },
+      data: {
+        date: parseDateOnly(data.date),
+        startTime: data.startTime,
+        endTime: data.endTime,
+        notes: data.notes?.trim() || null,
+        attendees: {
+          create: data.participantIds.map((userId) => ({ userId })),
+        },
+      },
+    }),
+  ]);
 
   revalidatePath("/");
 }

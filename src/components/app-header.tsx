@@ -24,7 +24,7 @@ export function AppHeader({ username }: AppHeaderProps) {
               href="/admins"
               className="text-muted transition hover:text-foreground"
             >
-              المشرفون
+              المستخدمون
             </Link>
           </nav>
         </div>
